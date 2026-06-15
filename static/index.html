@@ -1,0 +1,490 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+	<meta charset="UTF-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+	<title>Cloudflare Honeypot - Edge Security & Deception System</title>
+	<meta name="description" content="A serverless edge-level honeypot for Cloudflare Workers that deceives automated scanners and automatically blocks malicious IPs using WAF lists." />
+	<meta name="keywords" content="cloudflare, honeypot, security, waf, edge computing, serverless, cyber security, deception technology" />
+	<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+	<link rel="llms" type="text/plain" href="/llms.txt" />
+	<link rel="preconnect" href="https://fonts.googleapis.com">
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link
+		href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap"
+		rel="stylesheet">
+	<style>
+		:root {
+			--bg-base: #0f172a;
+			--bg-card: rgba(30, 41, 59, 0.7);
+			--bg-code: #020617;
+			--border: #334155;
+			--text-main: #cbd5e1;
+			--text-muted: #94a3b8;
+			--text-heading: #f8fafc;
+			--accent: #38bdf8;
+			--accent-hover: #0ea5e9;
+			--honey: #fbbf24;
+			--border-radius: 12px;
+		}
+
+		* { box-sizing: border-box; margin: 0; padding: 0; }
+		
+		body { 
+			font-family: 'Inter', -apple-system, sans-serif; 
+			background-color: var(--bg-base); 
+			color: var(--text-main); 
+			line-height: 1.6; 
+			padding: 40px 20px;
+			background-image: 
+				radial-gradient(circle at 50% 0%, rgba(56, 189, 248, 0.1), transparent 40%),
+				linear-gradient(rgba(15, 23, 42, 0.93), rgba(15, 23, 42, 0.93)),
+				url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg stroke='%231e293b' stroke-width='1'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4v-4H4v4H0v2h4v4h2v-4h4v-2H6zM36 4v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+			background-attachment: fixed;
+		}
+
+		.header-container { display: flex; align-items: center; justify-content: space-between; gap: 40px; max-width: 1400px; margin: 0 auto 60px; }
+		@media (max-width: 1024px) { .header-container { flex-direction: column; text-align: center; } }
+
+		.header-content { flex: 1; text-align: left; }
+		@media (max-width: 1024px) { .header-content { display: flex; flex-direction: column; align-items: center; } }
+		
+		/* Fixed Logo and Title Alignment with requested margin */
+		.logo-title-row { display: flex; align-items: center; gap: 20px; margin-bottom: 15px; margin-left: -77px; }
+		@media (max-width: 1024px) { .logo-title-row { justify-content: center; margin-left: 0; } }
+		
+		.main-logo { width: 56px; height: 56px; filter: drop-shadow(0 0 12px rgba(56, 189, 248, 0.4)); flex-shrink: 0; }
+
+		.header-content h1 { color: var(--text-heading); font-size: 2.8rem; font-weight: 800; letter-spacing: -0.025em; display: flex; align-items: center; gap: 12px; margin: 0; }
+		
+		.header-content p { color: var(--text-muted); font-size: 1.2rem; margin-bottom: 25px; max-width: 600px; }
+
+		.badges { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+		@media (max-width: 1024px) { .badges { justify-content: center; } }
+		.badge { padding: 5px 14px; border-radius: 30px; font-size: 0.85rem; font-weight: 600; background: rgba(30, 41, 59, 0.5); border: 1px solid var(--border); display: flex; align-items: center; gap: 8px; backdrop-filter: blur(4px); transition: all 0.2s ease; text-decoration: none !important; }
+		.badge-cf { color: #f6821f; border-color: rgba(246, 130, 31, 0.3); }
+		.badge-license { color: #10b981; border-color: rgba(16, 185, 129, 0.3); }
+		.badge-version { color: var(--accent); border-color: rgba(56, 189, 248, 0.3); }
+		.badge-github { color: var(--text-muted); border-color: var(--border); }
+		.badge-github:hover { color: var(--accent); border-color: var(--accent); background: rgba(56, 189, 248, 0.1); }
+
+		.header-visual { flex: 1.1; width: 100%; min-width: 450px; }
+		@media (max-width: 600px) { .header-visual { min-width: 100%; } }
+		
+		.hero-terminal { width: 100%; background: rgba(2, 6, 23, 0.95); border: 1px solid var(--border); border-radius: var(--border-radius); overflow: hidden; box-shadow: 0 20px 40px -12px rgba(0, 0, 0, 0.6); text-align: left; backdrop-filter: blur(10px); }
+		.terminal-header { background: #1e293b; padding: 10px 16px; display: flex; align-items: center; border-bottom: 1px solid var(--border); }
+		.dot { width: 12px; height: 12px; border-radius: 50%; margin-right: 8px; }
+		.dot.red { background: #ff5f56; } .dot.yellow { background: #ffbd2e; } .dot.green { background: #27c93f; }
+		.terminal-header .title { margin-left: auto; margin-right: auto; font-family: 'JetBrains Mono', monospace; font-size: 0.8rem; color: #94a3b8; }
+		.terminal-body { padding: 20px; font-family: 'JetBrains Mono', monospace; font-size: 0.9rem; color: #a3be8c; line-height: 1.7; height: 220px; overflow: hidden; }
+		
+		.layout-grid { display: grid; grid-template-columns: 1fr 1.6fr 350px; gap: 30px; max-width: 1550px; margin: 0 auto; align-items: start; }
+		@media (max-width: 1200px) { .layout-grid { grid-template-columns: 1fr 1.4fr; } .col-demo { grid-column: 1 / -1; } }
+		@media (max-width: 850px) { .layout-grid { grid-template-columns: 1fr; } }
+
+		.card { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--border-radius); padding: 30px; backdrop-filter: blur(8px); box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); }
+		.card h2 { color: var(--text-heading); font-size: 1.3rem; font-weight: 700; border-bottom: 1px solid var(--border); padding-bottom: 15px; margin-bottom: 25px; display: flex; align-items: center; gap: 12px; }
+		.card h3 { color: var(--text-heading); font-size: 1.1rem; font-weight: 600; margin: 24px 0 12px; }
+		p { margin-bottom: 16px; }
+		a { color: var(--accent); text-decoration: none; transition: color 0.15s ease; }
+		a:hover { color: var(--accent-hover); text-decoration: underline; }
+
+		code { font-family: 'JetBrains Mono', monospace; background: var(--bg-code); border: 1px solid var(--border); padding: 2px 6px; border-radius: 4px; font-size: 0.85em; color: #e2e8f0; }
+		pre { background: var(--bg-code); border: 1px solid var(--border); padding: 18px; border-radius: var(--border-radius); overflow-x: auto; margin-bottom: 20px; position: relative; }
+		pre code { background: transparent; border: none; padding: 0; color: #e2e8f0; font-size: 0.85em; }
+
+		.copy-btn { position: absolute; top: 10px; right: 10px; background: #1e293b; border: 1px solid var(--border); color: var(--text-muted); padding: 5px 10px; border-radius: 6px; font-size: 0.75rem; cursor: pointer; transition: all 0.2s; opacity: 0; }
+		pre:hover .copy-btn { opacity: 1; }
+
+		.step { margin-bottom: 24px; position: relative; }
+		.step-title { display: flex; align-items: center; margin-bottom: 10px; color: var(--text-heading); font-weight: 600; }
+		.step-number { background: var(--accent); color: var(--bg-base); width: 22px; height: 22px; display: inline-flex; align-items: center; justify-content: center; border-radius: 50%; font-size: 0.75rem; font-weight: 800; margin-right: 12px; flex-shrink: 0; }
+		.step p { padding-left: 34px; font-size: 0.95rem; }
+		.step pre { margin-left: 34px; }
+
+		.goal-highlight { background: rgba(56, 189, 248, 0.1); border-left: 4px solid var(--accent); padding: 16px 20px; border-radius: 0 var(--border-radius) var(--border-radius) 0; margin-bottom: 30px; }
+		ul { padding-left: 20px; margin-bottom: 20px; }
+		ul li { margin-bottom: 8px; }
+		.tech-stack { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 15px; }
+		.tech-tag { background: var(--bg-code); border: 1px solid var(--border); color: var(--text-muted); padding: 6px 12px; border-radius: 20px; font-size: 0.8rem; font-family: 'JetBrains Mono', monospace; }
+
+		.demo-group { margin-bottom: 25px; }
+		.demo-link { display: flex; align-items: center; font-family: 'JetBrains Mono', monospace; font-size: 0.85rem; color: var(--text-main); background: rgba(2, 6, 23, 0.4); border: 1px solid var(--border); padding: 10px 14px; border-radius: 8px; transition: all 0.2s ease; cursor: pointer; text-decoration: none !important; margin-bottom: 8px; }
+		.demo-link:hover { background: var(--border); border-color: var(--accent); transform: translateX(6px); box-shadow: 0 4px 12px rgba(0,0,0,0.2); }
+		.demo-link::before { content: "GET"; font-size: 0.65rem; background: #22c55e; color: #000; padding: 2px 6px; border-radius: 4px; margin-right: 12px; font-weight: 800; }
+
+		/* Modal Styles */
+		.modal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(15, 23, 42, 0.85); backdrop-filter: blur(6px); align-items: center; justify-content: center; }
+		.modal.show { display: flex; }
+		.modal-content { background: #000; border: 1px solid var(--border); border-radius: var(--border-radius); width: 90%; max-width: 900px; height: 80vh; display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.8); }
+		.modal-url-bar { background: #0f172a; padding: 10px 20px; border-bottom: 1px solid var(--border); font-family: 'JetBrains Mono', monospace; font-size: 0.85rem; color: var(--text-muted); display: flex; align-items: center; gap: 10px; }
+		.modal-url-bar span { color: var(--text-heading); }
+		#demo-iframe { width: 100%; height: 100%; border: none; background: #1e1e1e; }
+		#close-modal { cursor: pointer; position: relative; width: 12px; height: 12px; }
+
+		/* Toasts */
+		.toast-container { position: fixed; bottom: 20px; right: 20px; z-index: 1001; display: flex; flex-direction: column; gap: 10px; }
+		.toast { background: var(--bg-card); border: 1px solid var(--border); border-left: 4px solid var(--accent); color: var(--text-heading); padding: 16px 20px; border-radius: var(--border-radius); box-shadow: 0 10px 15px -3px rgba(0,0,0,0.3); display: flex; align-items: center; gap: 12px; font-size: 0.95rem; animation: slideIn 0.3s forwards, fadeOut 0.4s 4s forwards; backdrop-filter: blur(12px); }
+		.toast.banned { border-left-color: #ef4444; }
+		@keyframes slideIn { from { transform: translateX(120%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+		@keyframes fadeOut { from { opacity: 1; transform: translateX(0); } to { opacity: 0; transform: translateX(120%); } }
+
+		.term-line { margin-bottom: 4px; }
+		.term-prompt { color: #81a1c1; margin-right: 8px; }
+		.term-cmd { color: #ebcb8b; }
+		.term-err { color: #bf616a; font-weight: bold; }
+		.term-success { color: #a3be8c; }
+		.term-info { color: #88c0d0; }
+		.term-dim { color: #4c566a; }
+		.cursor { display: inline-block; width: 8px; height: 16px; background: #d8dee9; vertical-align: middle; animation: blink 1s step-end infinite; margin-left: 2px; }
+	</style>
+</head>
+
+<body>
+	<div class="header-container">
+		<div class="header-content">
+			<div class="logo-title-row">
+				<svg class="main-logo" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+					<path d="M50 5L15 20V45C15 67.3 30 87.9 50 95C70 87.9 85 67.3 85 45V20L50 5Z" fill="#38BDF8" fill-opacity="0.15" stroke="#38BDF8" stroke-width="3"/>
+					<path d="M50 30L63 37.5V52.5L50 60L37 52.5V37.5L50 30Z" fill="#FBBF24" fill-opacity="0.8"/>
+					<circle cx="50" cy="45" r="4" fill="#0F172A"/>
+					<path d="M50 60V75" stroke="#FBBF24" stroke-width="3" stroke-linecap="round"/>
+					<path d="M37 52.5L25 60" stroke="#FBBF24" stroke-width="2" stroke-dasharray="2 2"/>
+					<path d="M63 52.5L75 60" stroke="#FBBF24" stroke-width="2" stroke-dasharray="2 2"/>
+				</svg>
+				<h1>Cloudflare Honeypot</h1>
+			</div>
+			<p>Serverless Edge Security & Deception System</p>
+
+			<div class="badges">
+				<span class="badge badge-version">v1.1.0</span>
+				<span class="badge badge-cf">☁️ Cloudflare Workers</span>
+				<span class="badge badge-license">⚖️ MIT License</span>
+				<a href="https://github.com/SecH0us3/honeypot" target="_blank" class="badge badge-github" title="View on GitHub">
+					<svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+						<path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.44-1.305.806-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z" />
+					</svg>
+					GitHub
+				</a>
+			</div>
+		</div>
+
+		<div class="header-visual">
+			<div class="hero-terminal">
+				<div class="terminal-header">
+					<span class="dot red"></span><span class="dot yellow"></span><span class="dot green"></span>
+					<span class="title">
+						<span style="color: #a3be8c; font-weight: bold;">edge-monitor</span><span style="color: #eceff4;">@</span><span style="color: #81a1c1; font-weight: bold;">honeypot</span><span style="color: #eceff4;">:</span><span style="color: #b48ead; font-weight: bold;">~</span>
+					</span>
+				</div>
+				<div class="terminal-body" id="anim-terminal">
+					<!-- Animated content injected by JS -->
+				</div>
+			</div>
+		</div>
+	</div>
+
+	<div class="layout-grid">
+
+		<!-- Left Column: Setup Guide -->
+		<div class="card col-setup">
+			<h2>🔧 Configuration & Setup</h2>
+
+			<div class="step">
+				<div class="step-title"><span class="step-number">1</span> Clone & Install</div>
+				<p>Download the repository and install dependencies.</p>
+				<pre><code>git clone https://github.com/SecH0us3/honeypot.git
+cd honeypot
+npm i</code></pre>
+			</div>
+
+			<div class="step">
+				<div class="step-title"><span class="step-number">2</span> Deploy to Cloudflare</div>
+				<p>Deploy the worker to Cloudflare's edge network using Wrangler.</p>
+				<pre><code>npx wrangler deploy</code></pre>
+			</div>
+
+			<div class="step">
+				<div class="step-title"><span class="step-number">3</span> Create API Token</div>
+				<p><a href="https://dash.cloudflare.com/" target="_blank">Go to your Cloudflare Dashboard</a> and create
+					an API Token. You will need the following permissions to
+					manage IP Lists automatically:</p>
+				<ul>
+					<li><code>Account : Account WAF : Edit</code></li>
+					<li><code>Account : Account Filter Lists : Edit</code></li>
+					<li><code>Zone : Zone : Read</code></li>
+				</ul>
+				<img src="/token-demo.png" alt="Cloudflare API Token Creation Demo"
+					style="max-width: 100%; height: auto; border: 1px solid var(--border); border-radius: var(--border-radius); margin-top: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);" />
+			</div>
+
+			<div class="step">
+				<div class="step-title"><span class="step-number">4</span> Initialize Config</div>
+				<p>Navigate to your worker's live URL (e.g., <code>https://your-worker.workers.dev/install</code>).
+					Paste your generated API token, your Zone ID, and select the behavior mode.
+					<br><small style="color: var(--text-muted); display: block; margin-top: 5px;">(Zone ID can be found
+						on the Overview page of your website in Cloudflare)</small>
+					The worker will automatically create an IP List named <code>honeypot_ips</code> and
+					<strong>configure the WAF rule</strong> to block them.
+				</p>
+			</div>
+
+			<div
+				style="margin-top: 40px; padding: 20px; background: rgba(56, 189, 248, 0.05); border: 1px dashed var(--border); border-radius: var(--border-radius);">
+				<h3 style="margin-top: 0; font-size: 1rem; color: var(--accent);">🔄 Maintenance & Reinstallation</h3>
+				<p style="font-size: 0.9rem; color: var(--text-muted); margin-bottom: 12px;">To re-run the setup flow
+					(e.g., to update tokens or behavior) without clearing KV manually:</p>
+				<ol style="font-size: 0.85rem; padding-left: 20px; color: var(--text-muted);">
+					<li style="margin-bottom: 10px;">Set a secret key via CLI:
+						<pre
+							style="margin: 8px 0; padding: 10px;"><code>npx wrangler secret put REINSTALL_KEY</code></pre>
+					</li>
+					<li>Visit the protected install URL:
+						<pre style="margin: 8px 0; padding: 10px;"><code>/install?reinstall=YOUR_SECRET_KEY</code></pre>
+					</li>
+				</ol>
+			</div>
+
+		</div>
+
+		<!-- Middle Column: Project Description -->
+		<div class="card col-desc">
+			<h2>🎯 Purpose & Architecture</h2>
+
+			<div class="goal-highlight">
+				<strong>Objective:</strong> Deploy an intelligent edge-level trap that simulates vulnerable
+				infrastructure, absorbs scanning attempts, and automatically banishes attackers from your entire network
+				using Cloudflare IP Lists.
+			</div>
+
+			<h3>Detailed Overview</h3>
+			<p>Modern web infrastructure is constantly probed by automated scanners, botnets, and script kiddies
+				searching for exposed <code>.git</code> directories, `.env` files, or vulnerable admin panels. This
+				Honeypot is designed to intercept these probes directly at the CDN Edge before they ever reach your
+				origin servers.</p>
+
+			<p>Instead of merely blocking the scanner, the Honeypot deceives it. It dynamically generates
+				hyper-realistic fake responses—such as artificial Terraform state files, populated OpenAPI schemas, or
+				convincing SQL dumps. This wastes the attacker's computational resources and provides rich telemetry on
+				their attack patterns.</p>
+
+			<h3>Key Mechanisms</h3>
+			<ul>
+				<li><strong>Active Defense Integration:</strong> When an attacker trips a wire, the Honeypot uses the
+					Cloudflare API to add their IP directly into an Account-level Custom List
+					(<code>honeypot_ips</code>).</li>
+				<li><strong>TTL Cleanup:</strong> A lightweight Cron trigger runs directly on the Worker, automatically
+					purging IPs older than 3 hours to prevent list exhaustion and avoid permanent lockouts for dynamic
+					IP addresses.</li>
+				<li><strong>Behavior Modes:</strong> Choose between "Ghost Mode" (returning empty 200/404 responses
+					while secretly blocking the IP) or "Deception Mode" (serving dynamic fake payloads).</li>
+				<li><strong>Realistic Latency:</strong> In deception mode, artificial latency is injected. Random
+					response delays mimic the time it would take a real backend server to generate an SQL dump or
+					compress an archive.</li>
+			</ul>
+
+			<h3>Tech Stack</h3>
+			<div class="tech-stack">
+				<span class="tech-tag">TypeScript</span>
+				<span class="tech-tag">Cloudflare Workers</span>
+				<span class="tech-tag">CF KV Storage</span>
+				<span class="tech-tag">CF Custom Lists</span>
+				<span class="tech-tag">WAF Rules</span>
+			</div>
+		</div>
+
+		<!-- Right Column: Demo Links -->
+		<div class="card col-demo">
+			<h2>🧪 Demo Traps</h2>
+
+			<p style="font-size: 0.9rem; color: var(--text-muted); margin-bottom: 20px;">Click endpoints to trigger simulated payloads in a preview window.</p>
+
+			<div class="demo-group">
+				<h4>Git / DevOps Hooks</h4>
+				<ul class="demo-list">
+					<li><a href="/.git/config" class="demo-link">/.git/config</a></li>
+					<li><a href="/.git/HEAD" class="demo-link">/.git/HEAD</a></li>
+					<li><a href="/.env" class="demo-link">/.env</a></li>
+					<li><a href="/.env.production" class="demo-link">/.env.production</a></li>
+					<li><a href="/docker-compose.yml" class="demo-link">/docker-compose.yml</a></li>
+					<li><a href="/.aws/config" class="demo-link">/.aws/config</a></li>
+					<li><a href="/.aws/credentials" class="demo-link">/.aws/credentials</a></li>
+				</ul>
+			</div>
+
+			<div class="demo-group">
+				<h4>Admin & Configs</h4>
+				<ul class="demo-list">
+					<li><a href="/wp-config.php" class="demo-link">/wp-config.php</a></li>
+					<li><a href="/wp-admin/" class="demo-link">/wp-admin/</a></li>
+					<li><a href="/admin/" class="demo-link">/admin/</a></li>
+					<li><a href="/phpmyadmin/" class="demo-link">/phpmyadmin/</a></li>
+					<li><a href="/config.php" class="demo-link">/config.php</a></li>
+					<li><a href="/settings.php" class="demo-link">/settings.php</a></li>
+				</ul>
+			</div>
+
+			<div class="demo-group">
+				<h4>Backups & Archives</h4>
+				<ul class="demo-list">
+					<li><a href="/backup.sql" class="demo-link">/backup.sql</a></li>
+					<li><a href="/backup.zip" class="demo-link">/backup.zip</a></li>
+					<li><a href="/users.csv" class="demo-link">/users.csv</a></li>
+					<li><a href="/database.bak" class="demo-link">/database.bak</a></li>
+					<li><a href="/source.zip" class="demo-link">/source.zip</a></li>
+					<li><a href="/export.tar" class="demo-link">/export.tar</a></li>
+				</ul>
+			</div>
+
+			<div class="demo-group">
+				<h4>API Interfaces</h4>
+				<ul class="demo-list">
+					<li><a href="/swagger.json" class="demo-link">/swagger.json</a></li>
+					<li><a href="/openapi.json" class="demo-link">/openapi.json</a></li>
+					<li><a href="/graphql" class="demo-link">/graphql</a></li>
+					<li><a href="/api-docs/" class="demo-link">/api-docs/</a></li>
+					<li><a href="/api/v1/users" class="demo-link">/api/v1/users</a></li>
+				</ul>
+			</div>
+		</div>
+
+	</div>
+
+	<!-- Modal Window HTML -->
+	<div id="demo-modal" class="modal">
+		<div class="modal-content">
+			<div class="terminal-header">
+				<span class="dot red" id="close-modal"></span><span class="dot yellow"></span><span class="dot green"></span>
+				<span class="title">Honeypot Response Preview</span>
+			</div>
+			<div class="modal-url-bar">
+				GET <span id="modal-url">/.env</span>
+			</div>
+			<iframe id="demo-iframe" src="" frameborder="0"></iframe>
+		</div>
+	</div>
+
+	<!-- Toasts Container -->
+	<div id="toast-container" class="toast-container"></div>
+
+	<script>
+		// --- 1. Copy Buttons for Code Blocks ---
+		document.querySelectorAll('pre').forEach(pre => {
+			const btn = document.createElement('button');
+			btn.className = 'copy-btn';
+			btn.textContent = 'Copy';
+			btn.onclick = () => {
+				const codeBlock = pre.querySelector('code');
+				const text = codeBlock ? codeBlock.innerText : pre.innerText;
+				navigator.clipboard.writeText(text);
+				btn.textContent = 'Copied!';
+				setTimeout(() => { btn.textContent = 'Copy'; }, 2000);
+			};
+			pre.appendChild(btn);
+		});
+
+		// --- 2. Toast Notification System ---
+		function showToast(message, isBanned = false) {
+			const container = document.getElementById('toast-container');
+			const toast = document.createElement('div');
+			toast.className = `toast ${isBanned ? 'banned' : ''}`;
+			const icon = isBanned ? '🚨' : '🛡️';
+			toast.innerHTML = `<span>${icon}</span> <span>${message}</span>`;
+			container.appendChild(toast);
+			setTimeout(() => { if(container.contains(toast)) container.removeChild(toast); }, 4400);
+		}
+
+		// --- 3. Modal & Iframe Logic ---
+		const modal = document.getElementById('demo-modal');
+		const closeModalBtn = document.getElementById('close-modal');
+		const iframe = document.getElementById('demo-iframe');
+		const modalUrlText = document.getElementById('modal-url');
+
+		document.querySelectorAll('.demo-link').forEach(link => {
+			link.addEventListener('click', (e) => {
+				e.preventDefault();
+				const url = link.getAttribute('href');
+				modalUrlText.textContent = url;
+				modal.classList.add('show');
+				
+				showToast(`Serving deceptive payload for <b>${url}</b>`);
+				setTimeout(() => { showToast(`IP logged and added to <b>honeypot_ips</b> list!`, true); }, 1500);
+
+				setTimeout(() => {
+					iframe.src = url;
+					iframe.onload = function() {
+						try {
+							const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
+							const body = iframeDoc.body;
+							if (body.children.length === 1 && body.children[0].tagName.toLowerCase() === 'pre') {
+								body.style.backgroundColor = '#1e1e1e';
+								body.style.color = '#d4d4d4';
+								body.children[0].style.fontFamily = "'JetBrains Mono', monospace";
+								body.children[0].style.fontSize = "14px";
+								body.children[0].style.padding = "20px";
+							}
+						} catch(e) {}
+					};
+				}, 300);
+			});
+		});
+
+		const closeModal = () => {
+			modal.classList.remove('show');
+			setTimeout(() => { iframe.src = ''; }, 300);
+		};
+
+		closeModalBtn.addEventListener('click', closeModal);
+		modal.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
+		document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && modal.classList.contains('show')) closeModal(); });
+
+		// --- 4. Animated Terminal Hero ---
+		const termLines = [
+			{ text: "[10:24:12] INFO: Honeypot Worker listening on edge...", type: "info" },
+			{ text: "[10:24:45] hacker GET /.env HTTP/1.1", type: "dim" },
+			{ text: "[10:24:45] ⚠️  Trigger matched: Environment file probe (/.env)", type: "err" },
+			{ text: "[10:24:45] 🛡️  Generating fake environment payload...", type: "info" },
+			{ text: "[10:24:45] 🚨 Triggering Cloudflare API...", type: "cmd" },
+			{ text: "[10:24:46] ✅ IP 192.0.2.143 successfully added to WAF blocklist!", type: "success" },
+			{ text: "[10:24:46] Payload served (243 bytes). Connection closed.", type: "dim" }
+		];
+
+		const termContainer = document.getElementById('anim-terminal');
+		async function typeLine(lineObj) {
+			const lineDiv = document.createElement('div');
+			lineDiv.className = `term-line term-${lineObj.type}`;
+			if (lineObj.type === 'cmd') {
+				const prompt = document.createElement('span');
+				prompt.className = 'term-prompt';
+				prompt.textContent = '$';
+				lineDiv.appendChild(prompt);
+			}
+			const textSpan = document.createElement('span');
+			lineDiv.appendChild(textSpan);
+			const cursor = document.createElement('span');
+			cursor.className = 'cursor';
+			lineDiv.appendChild(cursor);
+			termContainer.appendChild(lineDiv);
+			for (let i = 0; i < lineObj.text.length; i++) {
+				textSpan.textContent += lineObj.text.charAt(i);
+				await new Promise(r => setTimeout(r, Math.random() * 30 + 10));
+			}
+			cursor.remove();
+			return new Promise(r => setTimeout(r, 600));
+		}
+
+		async function runTerminalAnimation() {
+			termContainer.innerHTML = '';
+			for (const line of termLines) { await typeLine(line); }
+			const finalLine = document.createElement('div');
+			finalLine.className = 'term-line';
+			finalLine.innerHTML = `<span class="term-prompt">$</span><span class="cursor"></span>`;
+			termContainer.appendChild(finalLine);
+			setTimeout(runTerminalAnimation, 8000);
+		}
+		setTimeout(runTerminalAnimation, 1000);
+	</script>
+</body>
+
+</html>
